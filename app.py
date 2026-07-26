@@ -250,14 +250,15 @@ def flights():
                     "grant_type": "client_credentials",
                     "client_id": client_id,
                     "client_secret": client_secret
-                }, timeout=5)
+                }, timeout=3)  # Short timeout so it doesn't hang your app
                 
                 if token_resp.status_code == 200:
                     token = token_resp.json().get("access_token")
                     if token:
                         headers["Authorization"] = f"Bearer {token}"
             except Exception as e:
-                print(f"Token acquisition failed: {e}")
+                # If auth times out or fails, log it and move on with standard headers
+                print(f"OAuth token bypass/timeout (falling back to anonymous): {e}")
 
         response = requests.get(opensky_url, headers=headers, timeout=8)
         
