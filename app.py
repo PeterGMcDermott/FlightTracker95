@@ -1,6 +1,7 @@
 import math
 import time
 import requests
+import os
 from flask import Flask, render_template, jsonify, request
 
 app = Flask(__name__)
@@ -237,8 +238,13 @@ def flights():
     
     try:
         headers = {'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)'}
-        response = requests.get(opensky_url, headers=headers, timeout=8)
-        print(f"DEBUG: OpenSky HTTP Status: {response.status_code}, Body: {response.text[:200]}")
+        
+        # Set up authentication if credentials are provided
+        opensky_user = os.environ.get("OPENSKY_USER")
+        opensky_pass = os.environ.get("OPENSKY_PASS")
+        auth = (opensky_user, opensky_pass) if opensky_user and opensky_pass else None
+        
+        response = requests.get(opensky_url, headers=headers, auth=auth, timeout=8)
         
         if response.status_code == 200:
             data = response.json()
@@ -346,8 +352,6 @@ def flights():
             "home": {"lat": home_lat, "lon": home_lon, "radius_miles": radius_miles},
             "flights": cache["flights"]
         }), 200
-
-import os
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5050))
