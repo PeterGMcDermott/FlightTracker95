@@ -237,14 +237,29 @@ def flights():
     opensky_url = f"https://opensky-network.org/api/states/all?lamin={lamin}&lamax={lamax}&lomin={lomin}&lomax={lomax}"
     
     try:
+        # 1. Fetch an OAuth2 token using environment variables
+        client_id = os.environ.get("OPENSKY_CLIENT_ID")
+        client_secret = os.environ.get("OPENSKY_CLIENT_SECRET")
+        
         headers = {'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)'}
         
-        # Set up authentication if credentials are provided
-        opensky_user = os.environ.get("OPENSKY_USER")
-        opensky_pass = os.environ.get("OPENSKY_PASS")
-        auth = (opensky_user, opensky_pass) if opensky_user and opensky_pass else None
-        
-        response = requests.get(opensky_url, headers=headers, auth=auth, timeout=8)
+        if client_id and client_secret:
+            try:
+                auth_url = "https://auth.opensky-network.org/auth/realms/opensky-network/protocol/openid-connect/token"
+                token_resp = requests.post(auth_url, data={
+                    "grant_type": "client_credentials",
+                    "client_id": client_id,
+                    "client_secret": client_secret
+                }, timeout=5)
+                
+                if token_resp.status_code == 200:
+                    token = token_resp.json().get("access_token")
+                    if token:
+                        headers["Authorization"] = f"Bearer {token}"
+            except Exception as e:
+                print(f"Token acquisition failed: {e}")
+
+        response = requests.get(opensky_url, headers=headers, timeout=8)
         
         if response.status_code == 200:
             data = response.json()
