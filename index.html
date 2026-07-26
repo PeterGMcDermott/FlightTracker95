@@ -1,0 +1,1785 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Live ADS-B Radar & 90s Airport Terminal Companion</title>
+    
+    <!-- Google Fonts: Inter, JetBrains Mono, & VT323 (Dot Matrix) -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=VT323&display=swap" rel="stylesheet">
+    
+    <!-- Leaflet CSS for Map -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+
+    <style>
+        :root {
+            --bg-dark: #080c14;
+            --panel-bg: rgba(15, 23, 42, 0.85);
+            --panel-border: rgba(56, 189, 248, 0.2);
+            --cyan-accent: #00f0ff;
+            --emerald-accent: #10b981;
+            --amber-accent: #f59e0b;
+            --rose-accent: #f43f5e;
+            --purple-accent: #a855f7;
+            --led-amber: #ffb000;
+            --led-green: #33ff00;
+            --text-primary: #f8fafc;
+            --text-secondary: #94a3b8;
+            --text-muted: #64748b;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg-dark);
+            color: var(--text-primary);
+            height: 100vh;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            background-image: 
+                radial-gradient(circle at 50% 0%, rgba(0, 240, 255, 0.05) 0%, transparent 50%),
+                radial-gradient(circle at 100% 100%, rgba(16, 185, 129, 0.03) 0%, transparent 50%);
+        }
+
+        .mono {
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        .dot-matrix {
+            font-family: 'VT323', monospace;
+            letter-spacing: 1px;
+        }
+
+        /* Header HUD */
+        header {
+            height: 64px;
+            background: rgba(10, 15, 26, 0.9);
+            backdrop-filter: blur(12px);
+            border-bottom: 1px solid var(--panel-border);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 24px;
+            z-index: 100;
+        }
+
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .brand-icon {
+            width: 38px;
+            height: 38px;
+            background: linear-gradient(135deg, rgba(0, 240, 255, 0.2), rgba(168, 85, 247, 0.2));
+            border: 1px solid var(--cyan-accent);
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--cyan-accent);
+            font-size: 18px;
+            box-shadow: 0 0 15px rgba(0, 240, 255, 0.2);
+        }
+
+        .brand-title {
+            font-size: 17px;
+            font-weight: 700;
+            letter-spacing: 0.5px;
+            background: linear-gradient(90deg, #ffffff, var(--cyan-accent));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .brand-subtitle {
+            font-size: 11px;
+            color: var(--text-muted);
+            letter-spacing: 1px;
+            text-transform: uppercase;
+        }
+
+        .header-center {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .status-badge {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: rgba(16, 185, 129, 0.1);
+            border: 1px solid rgba(16, 185, 129, 0.3);
+            padding: 6px 14px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--emerald-accent);
+        }
+
+        .pulse-dot {
+            width: 8px;
+            height: 8px;
+            background-color: var(--emerald-accent);
+            border-radius: 50%;
+            box-shadow: 0 0 8px var(--emerald-accent);
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(0.95); opacity: 0.8; }
+            50% { transform: scale(1.3); opacity: 1; box-shadow: 0 0 12px var(--emerald-accent); }
+            100% { transform: scale(0.95); opacity: 0.8; }
+        }
+
+        .btn-home-config {
+            background: rgba(168, 85, 247, 0.15);
+            border: 1px solid rgba(168, 85, 247, 0.4);
+            color: #d8b4fe;
+            padding: 6px 14px;
+            border-radius: 8px;
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            transition: all 0.2s ease;
+        }
+
+        .btn-home-config:hover {
+            background: rgba(168, 85, 247, 0.3);
+        }
+
+        .btn-retro-mode {
+            background: linear-gradient(135deg, rgba(255, 176, 0, 0.2), rgba(245, 158, 11, 0.3));
+            border: 1px solid #ffb000;
+            color: #ffb000;
+            padding: 6px 14px;
+            border-radius: 8px;
+            font-size: 12px;
+            font-weight: 700;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            box-shadow: 0 0 10px rgba(255, 176, 0, 0.2);
+            transition: all 0.2s ease;
+        }
+
+        .btn-retro-mode:hover {
+            background: rgba(255, 176, 0, 0.35);
+            box-shadow: 0 0 15px rgba(255, 176, 0, 0.4);
+        }
+
+        .header-controls {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .refresh-widget {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            background: rgba(15, 23, 42, 0.6);
+            padding: 4px 12px;
+            border-radius: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .countdown-text {
+            font-size: 12px;
+            color: var(--text-secondary);
+        }
+
+        .btn-refresh {
+            background: rgba(0, 240, 255, 0.1);
+            border: 1px solid rgba(0, 240, 255, 0.3);
+            color: var(--cyan-accent);
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s ease;
+        }
+
+        .btn-refresh:hover {
+            background: rgba(0, 240, 255, 0.25);
+            transform: rotate(45deg);
+        }
+
+        /* Dashboard Container */
+        .dashboard-container {
+            display: grid;
+            grid-template-columns: 1fr 620px;
+            flex: 1;
+            height: calc(100vh - 64px);
+            overflow: hidden;
+        }
+
+        @media (max-width: 1200px) {
+            .dashboard-container {
+                grid-template-columns: 1fr;
+                grid-template-rows: 1fr 1fr;
+            }
+        }
+
+        /* Map Section */
+        .map-section {
+            position: relative;
+            height: 100%;
+            width: 100%;
+        }
+
+        #map {
+            height: 100%;
+            width: 100%;
+            background: #06090e;
+        }
+
+        .telemetry-overlay {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            z-index: 500;
+            display: flex;
+            gap: 12px;
+            pointer-events: none;
+        }
+
+        .tele-card {
+            pointer-events: auto;
+            background: var(--panel-bg);
+            backdrop-filter: blur(12px);
+            border: 1px solid var(--panel-border);
+            padding: 12px 16px;
+            border-radius: 10px;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            min-width: 120px;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+        }
+
+        .tele-label {
+            font-size: 10px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: var(--text-muted);
+        }
+
+        .tele-value {
+            font-size: 18px;
+            font-weight: 700;
+            color: var(--text-primary);
+        }
+
+        /* Table & Inspector Section */
+        .table-section {
+            background: rgba(11, 16, 26, 0.95);
+            border-left: 1px solid var(--panel-border);
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .table-header-tools {
+            padding: 14px 18px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            background: rgba(15, 23, 42, 0.5);
+        }
+
+        .search-box {
+            position: relative;
+            width: 100%;
+        }
+
+        .search-box i {
+            position: absolute;
+            left: 12px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: var(--text-muted);
+            font-size: 13px;
+        }
+
+        .search-input {
+            width: 100%;
+            background: rgba(15, 23, 42, 0.8);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+            padding: 8px 12px 8px 36px;
+            color: var(--text-primary);
+            font-size: 13px;
+            outline: none;
+        }
+
+        .tools-subrow {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .filter-tabs {
+            display: flex;
+            gap: 6px;
+        }
+
+        .tab-btn {
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            color: var(--text-secondary);
+            padding: 5px 10px;
+            border-radius: 6px;
+            font-size: 11px;
+            cursor: pointer;
+        }
+
+        .tab-btn.active {
+            background: rgba(0, 240, 255, 0.15);
+            border-color: var(--cyan-accent);
+            color: var(--cyan-accent);
+            font-weight: 600;
+        }
+
+        .sort-select {
+            background: rgba(15, 23, 42, 0.9);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            color: var(--text-secondary);
+            font-size: 11px;
+            padding: 4px 8px;
+            border-radius: 6px;
+            outline: none;
+        }
+
+        .table-container {
+            flex: 1;
+            overflow-y: auto;
+            scrollbar-width: thin;
+        }
+
+        .flight-table {
+            width: 100%;
+            border-collapse: collapse;
+            text-align: left;
+        }
+
+        .flight-table th {
+            position: sticky;
+            top: 0;
+            background: rgba(15, 23, 42, 0.95);
+            padding: 10px 12px;
+            font-size: 10px;
+            text-transform: uppercase;
+            letter-spacing: 0.8px;
+            color: var(--text-muted);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+            z-index: 10;
+        }
+
+        .flight-table td {
+            padding: 10px 12px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+            font-size: 12px;
+        }
+
+        .flight-row {
+            cursor: pointer;
+        }
+
+        .flight-row:hover {
+            background: rgba(0, 240, 255, 0.08);
+        }
+
+        .flight-row.selected {
+            background: rgba(168, 85, 247, 0.15) !important;
+            border-left: 3px solid var(--purple-accent);
+        }
+
+        .callsign-title {
+            font-weight: 700;
+            color: var(--cyan-accent);
+            font-size: 13px;
+        }
+
+        .airline-sub {
+            font-size: 10px;
+            color: var(--text-muted);
+            margin-top: 2px;
+        }
+
+        .route-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            background: rgba(0, 240, 255, 0.1);
+            border: 1px solid rgba(0, 240, 255, 0.25);
+            color: var(--cyan-accent);
+            padding: 3px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 600;
+        }
+
+        .dist-badge {
+            font-family: 'JetBrains Mono', monospace;
+            color: #d8b4fe;
+            font-weight: 700;
+            background: rgba(168, 85, 247, 0.15);
+            padding: 2px 6px;
+            border-radius: 4px;
+            border: 1px solid rgba(168, 85, 247, 0.3);
+        }
+
+        /* Inspector Drawer */
+        .inspector-drawer {
+            background: rgba(15, 23, 42, 0.98);
+            border-top: 2px solid var(--purple-accent);
+            padding: 16px 20px;
+            display: none;
+            flex-direction: column;
+            gap: 12px;
+            box-shadow: 0 -10px 30px rgba(0, 0, 0, 0.5);
+            z-index: 50;
+        }
+
+        .inspector-drawer.active {
+            display: flex;
+        }
+
+        .inspector-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .inspector-route {
+            font-size: 16px;
+            font-weight: 700;
+            color: var(--cyan-accent);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .inspector-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 10px;
+            background: rgba(255, 255, 255, 0.02);
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            padding: 12px;
+            border-radius: 8px;
+        }
+
+        .inspector-item label {
+            font-size: 9px;
+            text-transform: uppercase;
+            color: var(--text-muted);
+        }
+
+        .inspector-item span {
+            font-size: 13px;
+            font-weight: 600;
+        }
+
+        /* ---------------------------------------------------- */
+        /* FULLSCREEN 90s RETRO AIRPORT TERMINAL DOT-MATRIX MODE */
+        /* ---------------------------------------------------- */
+        .retro-terminal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background-color: #020406;
+            background-image: 
+                radial-gradient(circle at 50% 50%, rgba(255, 176, 0, 0.04) 0%, transparent 80%),
+                linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.4) 50%),
+                linear-gradient(90deg, rgba(255, 0, 0, 0.03), rgba(0, 255, 0, 0.01), rgba(0, 0, 255, 0.03));
+            background-size: 100% 100%, 100% 4px, 6px 100%;
+            z-index: 2000;
+            display: none;
+            flex-direction: column;
+            color: var(--led-amber);
+            font-family: 'VT323', monospace;
+            padding: 24px 32px;
+            overflow: hidden;
+            box-shadow: inset 0 0 100px rgba(0,0,0,0.9);
+        }
+
+        .retro-terminal-overlay.active {
+            display: flex;
+        }
+
+        .retro-top-bar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            border-bottom: 2px solid var(--led-amber);
+            padding-bottom: 12px;
+            margin-bottom: 20px;
+            text-shadow: 0 0 8px rgba(255, 176, 0, 0.7);
+        }
+
+        .retro-title {
+            font-size: 32px;
+            font-weight: bold;
+            letter-spacing: 2px;
+        }
+
+        .retro-timer-badge {
+            font-size: 24px;
+            color: #ffffff;
+            background: rgba(255, 176, 0, 0.2);
+            border: 1px solid var(--led-amber);
+            padding: 4px 14px;
+            border-radius: 4px;
+        }
+
+        .btn-exit-retro {
+            background: transparent;
+            border: 2px solid var(--rose-accent);
+            color: var(--rose-accent);
+            font-family: 'VT323', monospace;
+            font-size: 22px;
+            padding: 4px 16px;
+            cursor: pointer;
+            text-shadow: 0 0 6px var(--rose-accent);
+            transition: all 0.2s ease;
+        }
+
+        .btn-exit-retro:hover {
+            background: var(--rose-accent);
+            color: #000;
+        }
+
+        .retro-carousel-wrapper {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            position: relative;
+        }
+
+        /* Slide Layouts (Screens 1 to 5) */
+        .retro-single-slide {
+            display: grid;
+            grid-template-columns: 1fr 440px;
+            gap: 24px;
+            height: calc(100vh - 160px);
+        }
+
+        .retro-info-panel {
+            background: rgba(8, 12, 20, 0.95);
+            border: 2px dashed var(--led-amber);
+            padding: 24px;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+            box-shadow: 0 0 20px rgba(255, 176, 0, 0.15);
+        }
+
+        .retro-rank-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 28px;
+            color: #ffffff;
+            border-bottom: 1px dashed rgba(255, 176, 0, 0.4);
+            padding-bottom: 8px;
+        }
+
+        .retro-airline-row {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            font-size: 42px;
+            color: var(--led-amber);
+            text-shadow: 0 0 10px rgba(255, 176, 0, 0.8);
+        }
+
+        .retro-route-banner {
+            background: rgba(255, 176, 0, 0.1);
+            border: 1px solid var(--led-amber);
+            padding: 12px 18px;
+            font-size: 34px;
+            display: flex;
+            align-items: center;
+            justify-content: space-around;
+            color: #ffffff;
+        }
+
+        .retro-distance-large {
+            font-size: 48px;
+            color: #33ff00;
+            text-shadow: 0 0 12px rgba(51, 255, 0, 0.8);
+            text-align: center;
+            background: rgba(51, 255, 0, 0.05);
+            border: 1px solid #33ff00;
+            padding: 8px;
+        }
+
+        .retro-specs-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 14px;
+            font-size: 26px;
+        }
+
+        .retro-spec-box {
+            background: rgba(0, 0, 0, 0.6);
+            border: 1px solid rgba(255, 176, 0, 0.3);
+            padding: 10px 14px;
+        }
+
+        .retro-spec-box label {
+            display: block;
+            font-size: 18px;
+            color: var(--text-muted);
+        }
+
+        .retro-spec-box span {
+            color: #ffffff;
+            text-shadow: 0 0 6px #ffffff;
+        }
+
+        .retro-map-panel {
+            background: #020406;
+            border: 2px solid var(--led-amber);
+            height: 100%;
+            position: relative;
+            box-shadow: 0 0 15px rgba(255, 176, 0, 0.2);
+        }
+
+        #retroMiniMap, #retroSummaryMap {
+            width: 100%;
+            height: 100%;
+            background: #020406 !important;
+        }
+
+        /* 90S RETRO POPUP STYLING */
+        .retro-popup .leaflet-popup-content-wrapper {
+            background: #020406 !important;
+            border: 2px dashed #ffb000 !important;
+            color: #ffb000 !important;
+            font-family: 'VT323', monospace !important;
+            font-size: 18px !important;
+            border-radius: 0px !important;
+            box-shadow: 0 0 15px rgba(255, 176, 0, 0.5) !important;
+            padding: 4px 8px !important;
+        }
+
+        .retro-popup .leaflet-popup-tip {
+            background: #020406 !important;
+            border: 1px dashed #ffb000 !important;
+        }
+
+        /* Screen 6: Side-by-side Summary Table & Radar View */
+        .retro-summary-slide {
+            display: grid;
+            grid-template-columns: 1fr 480px;
+            gap: 24px;
+            height: calc(100vh - 160px);
+        }
+
+        .retro-table-panel {
+            background: rgba(8, 12, 20, 0.95);
+            border: 2px solid var(--led-amber);
+            padding: 16px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .retro-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 24px;
+        }
+
+        .retro-table th {
+            border-bottom: 2px solid var(--led-amber);
+            text-align: left;
+            padding: 8px 12px;
+            color: #ffffff;
+            text-shadow: 0 0 6px #ffffff;
+        }
+
+        .retro-table td {
+            border-bottom: 1px dashed rgba(255, 176, 0, 0.3);
+            padding: 12px;
+        }
+
+        .retro-table tr.active-row {
+            background: rgba(255, 176, 0, 0.15);
+            color: #ffffff;
+        }
+
+        .retro-footer-nav {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            font-size: 22px;
+            border-top: 1px solid var(--led-amber);
+            padding-top: 12px;
+            margin-top: 10px;
+        }
+
+        .slide-dots {
+            display: flex;
+            gap: 10px;
+        }
+
+        .slide-dot {
+            width: 14px;
+            height: 14px;
+            border: 1px solid var(--led-amber);
+            background: transparent;
+        }
+
+        .slide-dot.active {
+            background: var(--led-amber);
+            box-shadow: 0 0 10px var(--led-amber);
+        }
+
+        /* Home Address Modal */
+        .modal-backdrop {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: rgba(0, 0, 0, 0.75);
+            backdrop-filter: blur(8px);
+            z-index: 1000;
+            display: none;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal-backdrop.active {
+            display: flex;
+        }
+
+        .modal-card {
+            background: #0f172a;
+            border: 1px solid var(--panel-border);
+            width: 480px;
+            border-radius: 14px;
+            padding: 24px;
+            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6);
+            display: flex;
+            flex-direction: column;
+            gap: 18px;
+        }
+
+        .modal-title {
+            font-size: 18px;
+            font-weight: 700;
+            color: var(--text-primary);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .btn-close-modal {
+            background: none;
+            border: none;
+            color: var(--text-muted);
+            font-size: 16px;
+            cursor: pointer;
+        }
+
+        .input-group {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .input-group label {
+            font-size: 11px;
+            text-transform: uppercase;
+            color: var(--text-muted);
+            letter-spacing: 0.8px;
+            font-weight: 600;
+        }
+
+        .address-input-wrapper {
+            display: flex;
+            gap: 8px;
+        }
+
+        .modal-input {
+            flex: 1;
+            background: rgba(30, 41, 59, 0.8);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+            padding: 10px 14px;
+            color: var(--text-primary);
+            font-size: 13px;
+            outline: none;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #a855f7, #7c3aed);
+            border: none;
+            color: white;
+            padding: 10px 18px;
+            border-radius: 8px;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .radius-slider-container {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+        }
+
+        .radius-slider {
+            flex: 1;
+            accent-color: var(--purple-accent);
+        }
+
+        .empty-state {
+            padding: 40px 20px;
+            text-align: center;
+            color: var(--text-muted);
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Standard Header HUD -->
+    <header>
+        <div class="brand">
+            <div class="brand-icon">
+                <i class="fa-solid fa-radar"></i>
+            </div>
+            <div>
+                <div class="brand-title">HOME RADAR &amp; FLIGHT TRACKER</div>
+                <div class="brand-subtitle" id="homeLocationLabel">Home: Franklin, TN (30 mi radius)</div>
+            </div>
+        </div>
+
+        <div class="header-center">
+            <div class="status-badge">
+                <div class="pulse-dot"></div>
+                <span id="statusText">LIVE OPENSKY FEED</span>
+            </div>
+
+            <button class="btn-home-config" onclick="openHomeModal()">
+                <i class="fa-solid fa-house-signal"></i>
+                <span>Set Home Base</span>
+            </button>
+
+            <button class="btn-retro-mode" onclick="openRetroTerminal()">
+                <i class="fa-solid fa-tv"></i>
+                <span>📺 90s RETRO TERMINAL</span>
+            </button>
+        </div>
+
+        <div class="header-controls">
+            <div class="refresh-widget">
+                <span class="countdown-text">Auto Refresh: <strong id="timerText" class="mono" style="color: var(--cyan-accent);">15s</strong></span>
+                <button class="btn-refresh" id="refreshBtn" onclick="manualRefresh()" title="Refresh Now">
+                    <i class="fa-solid fa-rotate-right"></i>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Dashboard Grid -->
+    <div class="dashboard-container">
+        <!-- Interactive Map -->
+        <div class="map-section">
+            <div class="telemetry-overlay">
+                <div class="tele-card">
+                    <span class="tele-label">Airborne Traffic</span>
+                    <span class="tele-value mono" id="statCount" style="color: var(--cyan-accent);">0</span>
+                </div>
+                <div class="tele-card">
+                    <span class="tele-label">Nearest Plane</span>
+                    <span class="tele-value mono" id="statNearest" style="color: #d8b4fe;">- <span style="font-size:11px; font-weight: normal; color:var(--text-muted);">MI</span></span>
+                </div>
+                <div class="tele-card">
+                    <span class="tele-label">Max Speed</span>
+                    <span class="tele-value mono" id="statMaxSpeed" style="color: var(--emerald-accent);">0 <span style="font-size:11px; font-weight: normal; color:var(--text-muted);">MPH</span></span>
+                </div>
+            </div>
+            <div id="map"></div>
+        </div>
+
+        <!-- Table & Inspector Section -->
+        <div class="table-section">
+            <div class="table-header-tools">
+                <div class="search-box">
+                    <i class="fa-solid fa-magnifying-glass"></i>
+                    <input type="text" id="searchInput" class="search-input" placeholder="Search Callsign, Airline, Route, or Aircraft..." oninput="filterTable()">
+                </div>
+                <div class="tools-subrow">
+                    <div class="filter-tabs">
+                        <button class="tab-btn active" onclick="setFilter('all', this)">All</button>
+                        <button class="tab-btn" onclick="setFilter('airborne', this)">Airborne</button>
+                        <button class="tab-btn" onclick="setFilter('ground', this)">On Ground</button>
+                    </div>
+                    <div>
+                        <select id="sortSelect" class="sort-select" onchange="sortAndRenderTable()">
+                            <option value="dist_asc">Sort: Nearest First 📍</option>
+                            <option value="alt_desc">Sort: Highest Altitude</option>
+                            <option value="speed_desc">Sort: Fastest Speed</option>
+                            <option value="callsign">Sort: Callsign A-Z</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Master Table -->
+            <div class="table-container">
+                <table class="flight-table">
+                    <thead>
+                        <tr>
+                            <th>Flight &amp; Airline</th>
+                            <th>Route</th>
+                            <th>Aircraft / Tail #</th>
+                            <th>Distance</th>
+                            <th>Alt &amp; Speed</th>
+                        </tr>
+                    </thead>
+                    <tbody id="flightTableBody">
+                        <tr>
+                            <td colspan="5" class="empty-state">
+                                <i class="fa-solid fa-spinner fa-spin"></i>
+                                <div>Scanning ADS-B radar &amp; route metadata...</div>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Inspector Drawer -->
+            <div class="inspector-drawer" id="inspectorDrawer">
+                <div class="inspector-header">
+                    <div>
+                        <div class="inspector-route" id="inspRoute">
+                            <span>KBNA</span>
+                            <i class="fa-solid fa-plane" style="color: var(--cyan-accent); font-size: 13px;"></i>
+                            <span>KMCO</span>
+                        </div>
+                        <div style="font-size: 11px; color: var(--text-muted); margin-top: 2px;" id="inspAirline">
+                            Southwest Airlines • Flight SWA481
+                        </div>
+                    </div>
+                    <button class="btn-close-modal" onclick="closeInspector()"><i class="fa-solid fa-xmark"></i></button>
+                </div>
+
+                <div class="inspector-grid">
+                    <div class="inspector-item">
+                        <label>Distance</label>
+                        <span id="inspDist" class="mono" style="color:#d8b4fe;">3.4 MI</span>
+                    </div>
+                    <div class="inspector-item">
+                        <label>Altitude</label>
+                        <span id="inspAlt" class="mono">12,500 FT</span>
+                    </div>
+                    <div class="inspector-item">
+                        <label>Speed</label>
+                        <span id="inspSpeed" class="mono" style="color:var(--emerald-accent);">285 MPH</span>
+                    </div>
+                    <div class="inspector-item">
+                        <label>Heading</label>
+                        <span id="inspHeading" class="mono">197° (SSW)</span>
+                    </div>
+                    <div class="inspector-item">
+                        <label>Aircraft Model</label>
+                        <span id="inspAircraft">Boeing 737</span>
+                    </div>
+                    <div class="inspector-item">
+                        <label>Tail Registration</label>
+                        <span id="inspTail" class="mono">N900WN</span>
+                    </div>
+                    <div class="inspector-item">
+                        <label>Vertical Speed</label>
+                        <span id="inspVRate" class="mono">+1,250 FPM</span>
+                    </div>
+                    <div class="inspector-item">
+                        <label>Squawk</label>
+                        <span id="inspSquawk" class="mono">3357</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ----------------------------------------------------------------- -->
+    <!-- 90S RETRO AIRPORT TERMINAL DOT-MATRIX FULLSCREEN OVERLAY          -->
+    <!-- ----------------------------------------------------------------- -->
+    <div class="retro-terminal-overlay" id="retroTerminalView">
+        <div class="retro-top-bar">
+            <div class="retro-title">
+                <i class="fa-solid fa-plane-departure" style="color: var(--led-amber);"></i> 
+                [ NASHVILLE AIRPORT FLIGHT INFORMATION SYSTEM - 1995 ]
+            </div>
+            <div style="display: flex; align-items: center; gap: 16px;">
+                <div class="retro-timer-badge">
+                    NEXT SCREEN IN: <span id="retroSlideTimer">10</span>S
+                </div>
+                <button class="btn-exit-retro" onclick="closeRetroTerminal()">EXIT TERMINAL [ESC]</button>
+            </div>
+        </div>
+
+        <div class="retro-carousel-wrapper">
+            
+            <!-- SINGLE AIRCRAFT SPOTLIGHT (SCREENS 1 TO 5) -->
+            <div class="retro-single-slide" id="retroSpotlightSlide">
+                <div class="retro-info-panel">
+                    <div class="retro-rank-header">
+                        <span id="retroRankLabel">PROXIMITY RANK: #1 CLOSEST AIRCRAFT</span>
+                        <span id="retroTimestamp">12:58:41 UTC</span>
+                    </div>
+
+                    <div class="retro-airline-row">
+                        <i class="fa-solid fa-plane" id="retroAirlineIcon"></i>
+                        <span id="retroAirlineText">SOUTHWEST AIRLINES (SWA481)</span>
+                    </div>
+
+                    <div class="retro-route-banner">
+                        <span id="retroOrigin">KBNA (NASHVILLE)</span>
+                        <i class="fa-solid fa-right-long" style="color: var(--led-amber);"></i>
+                        <span id="retroDest">KMCO (ORLANDO)</span>
+                    </div>
+
+                    <div class="retro-distance-large" id="retroDist">
+                        PROXIMITY: 2.8 STATUTE MILES FROM YOUR HOUSE
+                    </div>
+
+                    <div class="retro-specs-grid">
+                        <div class="retro-spec-box">
+                            <label>BAROMETRIC ALTITUDE</label>
+                            <span id="retroAlt">12,500 FT</span>
+                        </div>
+                        <div class="retro-spec-box">
+                            <label>GROUND VELOCITY</label>
+                            <span id="retroSpeed">285 MPH (247 KTS)</span>
+                        </div>
+                        <div class="retro-spec-box">
+                            <label>TRUE TRACK / HEADING</label>
+                            <span id="retroHeading">197.8° (SSW)</span>
+                        </div>
+                        <div class="retro-spec-box">
+                            <label>CLIMB / DESCENT RATE</label>
+                            <span id="retroVRate">+1,250 FPM</span>
+                        </div>
+                        <div class="retro-spec-box">
+                            <label>AIRCRAFT MAKE &amp; MODEL</label>
+                            <span id="retroAircraft">BOEING 737-800</span>
+                        </div>
+                        <div class="retro-spec-box">
+                            <label>TAIL REGISTRATION #</label>
+                            <span id="retroTail">N900WN</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Mini Map Overlay for Spotlight Aircraft -->
+                <div class="retro-map-panel">
+                    <div id="retroMiniMap"></div>
+                </div>
+            </div>
+
+            <!-- SUMMARY SCREEN (SCREEN 6: 5-FLIGHT SIDE-BY-SIDE TABLE & RADAR) -->
+            <div class="retro-summary-slide" id="retroSummarySlide" style="display: none;">
+                <div class="retro-table-panel">
+                    <div style="font-size: 28px; color: #ffffff; border-bottom: 2px solid var(--led-amber); padding-bottom: 6px; margin-bottom: 8px;">
+                        TOP 5 CLOSEST AIRCRAFT PROXIMITY SUMMARY
+                    </div>
+                    <table class="retro-table">
+                        <thead>
+                            <tr>
+                                <th>#</th>
+                                <th>FLIGHT / AIRLINE</th>
+                                <th>DIST</th>
+                                <th>ROUTE</th>
+                                <th>ALT</th>
+                                <th>SPEED</th>
+                            </tr>
+                        </thead>
+                        <tbody id="retroSummaryTableBody">
+                            <!-- Populated dynamically -->
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="retro-map-panel">
+                    <div id="retroSummaryMap"></div>
+                </div>
+            </div>
+
+            <!-- Footer Dots Navigation -->
+            <div class="retro-footer-nav">
+                <div>
+                    CURRENT ROTATION: <span id="retroSlideLabel" style="color: #ffffff;">SCREEN 1/6: CLOSEST AIRCRAFT #1</span>
+                </div>
+                <div class="slide-dots">
+                    <div class="slide-dot active" id="dot0"></div>
+                    <div class="slide-dot" id="dot1"></div>
+                    <div class="slide-dot" id="dot2"></div>
+                    <div class="slide-dot" id="dot3"></div>
+                    <div class="slide-dot" id="dot4"></div>
+                    <div class="slide-dot" id="dot5"></div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- Home Address Setup Modal -->
+    <div class="modal-backdrop" id="homeModal">
+        <div class="modal-card">
+            <div class="modal-title">
+                <span>📍 Set Your House / Home Base</span>
+                <button class="btn-close-modal" onclick="closeHomeModal()"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            
+            <div class="input-group">
+                <label>Street Address or City</label>
+                <div class="address-input-wrapper">
+                    <input type="text" id="addressInput" class="modal-input" placeholder="e.g. 100 Main St, Franklin, TN" value="Franklin, TN">
+                    <button class="btn-primary" onclick="locateAddress()">
+                        <i class="fa-solid fa-location-crosshairs"></i>
+                        <span>Locate</span>
+                    </button>
+                </div>
+            </div>
+
+            <div class="input-group">
+                <label>Radar Coverage Radius: <strong id="radiusValue" style="color: var(--purple-accent);">30</strong> Miles</label>
+                <div class="radius-slider-container">
+                    <span class="mono" style="font-size: 11px; color: var(--text-muted);">5 MI</span>
+                    <input type="range" id="radiusSlider" class="radius-slider" min="5" max="60" step="5" value="30" oninput="updateRadiusLabel(this.value)">
+                    <span class="mono" style="font-size: 11px; color: var(--text-muted);">60 MI</span>
+                </div>
+            </div>
+
+            <div style="font-size: 11px; color: var(--text-muted); line-height: 1.5; background: rgba(255,255,255,0.03); padding: 10px; border-radius: 6px;">
+                <i class="fa-solid fa-shield-halved" style="color: var(--emerald-accent);"></i> 
+                Your home location is calculated locally for proximity sorting and is never sent to external servers.
+            </div>
+
+            <div style="display: flex; justify-content: flex-end; gap: 10px;">
+                <button class="btn-primary" onclick="saveHomeConfig()" style="width: 100%; justify-content: center;">
+                    <i class="fa-solid fa-check"></i> Save &amp; Update Radar
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <script>
+        // State variables
+        let homeState = {
+            address: localStorage.getItem('home_address') || "Franklin, TN",
+            lat: parseFloat(localStorage.getItem('home_lat')) || 35.9259,
+            lon: parseFloat(localStorage.getItem('home_lon')) || -86.8689,
+            radius: parseInt(localStorage.getItem('home_radius')) || 30
+        };
+
+        // Main Map
+        const map = L.map('map', { center: [homeState.lat, homeState.lon], zoom: 9, zoomControl: false });
+        L.control.zoom({ position: 'bottomright' }).addTo(map);
+
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+            attribution: '&copy; OpenStreetMap &copy; CARTO', maxZoom: 18
+        }).addTo(map);
+
+        let homeMarker = null;
+        let radarRingsGroup = L.layerGroup().addTo(map);
+        let flightMarkers = {};
+        let rawFlightsData = [];
+        let selectedIcao = null;
+        let currentFilter = 'all';
+        let countdownSec = 15;
+        let timerInterval = null;
+
+        // Retro Mode State (10-Second Rotation Cycle)
+        let isRetroMode = false;
+        let retroSlideIndex = 0; // 0-4 = top 5 flights, 5 = summary screen
+        let retroCountdown = 10; // 10-second rotation per screen
+        let retroTimer = null;
+        let retroMiniMap = null;
+        let retroMiniHomeMarker = null;
+        let retroMiniMapMarker = null;
+        let retroSummaryMap = null;
+        let retroSummaryMarkers = [];
+
+        function createHomeIcon() {
+            return L.divIcon({
+                className: 'home-beacon-marker',
+                html: `
+                    <div style="position: relative; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center;">
+                        <div style="position: absolute; width: 32px; height: 32px; background: rgba(168, 85, 247, 0.3); border: 2px solid #a855f7; border-radius: 50%; animation: pulse 2s infinite;"></div>
+                        <div style="position: absolute; width: 12px; height: 12px; background: #a855f7; border-radius: 50%; box-shadow: 0 0 12px #a855f7;"></div>
+                    </div>
+                `,
+                iconSize: [32, 32], iconAnchor: [16, 16]
+            });
+        }
+
+        // 90s Retro Styled House Beacon Marker
+        function createRetroHomeIcon() {
+            return L.divIcon({
+                className: 'retro-home-beacon',
+                html: `
+                    <div style="position: relative; width: 44px; height: 44px; display: flex; flex-direction: column; align-items: center; justify-content: center; filter: drop-shadow(0 0 8px #ffb000);">
+                        <div style="color: #ffb000; font-size: 22px; text-shadow: 0 0 10px #ffb000;"><i class="fa-solid fa-house-signal"></i></div>
+                        <div style="background: #020406; border: 1px solid #ffb000; color: #ffb000; font-family: 'VT323', monospace; font-size: 11px; padding: 1px 4px; border-radius: 2px; white-space: nowrap; margin-top: -2px;">
+                            [MY HOUSE]
+                        </div>
+                    </div>
+                `,
+                iconSize: [44, 44], iconAnchor: [22, 22]
+            });
+        }
+
+        function drawRadarRings() {
+            radarRingsGroup.clearLayers();
+            const radiusMeters = homeState.radius * 1609.34;
+
+            L.circle([homeState.lat, homeState.lon], {
+                radius: radiusMeters, color: '#a855f7', weight: 1.5, dashArray: '6, 6', fillColor: '#a855f7', fillOpacity: 0.03
+            }).addTo(radarRingsGroup);
+
+            [0.25, 0.5, 0.75].forEach(fraction => {
+                L.circle([homeState.lat, homeState.lon], {
+                    radius: radiusMeters * fraction, color: 'rgba(56, 189, 248, 0.3)', weight: 1, dashArray: '4, 4', fill: false
+                }).addTo(radarRingsGroup);
+            });
+
+            if (homeMarker) {
+                homeMarker.setLatLng([homeState.lat, homeState.lon]);
+            } else {
+                homeMarker = L.marker([homeState.lat, homeState.lon], { icon: createHomeIcon() }).addTo(map);
+            }
+            homeMarker.bindPopup(`<b>📍 Home Base Radar</b><br>${homeState.address}<br><small>Coverage Radius: ${homeState.radius} Miles</small>`);
+        }
+
+        function createAircraftIcon(heading, isGround, isRetro = false) {
+            const color = isRetro ? "#ffb000" : (isGround ? "#94a3b8" : "#00f0ff");
+            const glow = isRetro ? "drop-shadow(0px 0px 8px #ffb000)" : (isGround ? "none" : "drop-shadow(0px 0px 6px #00f0ff)");
+            
+            const svgHtml = `
+                <div style="transform: rotate(${heading}deg); transform-origin: center center; width: 28px; height: 28px; filter: ${glow}; transition: transform 0.4s ease;">
+                    <svg viewBox="0 0 24 24" width="28" height="28" fill="${color}">
+                        <path d="M21,16 L21,14 L13,9 L13,3.5 C13,2.67 12.33,2 11.5,2 C10.67,2 10,2.67 10,3.5 L10,9 L2,14 L2,16 L10,13.5 L10,19 L8,20.5 L8,22 L11.5,21 L15,22 L15,20.5 L13,19 L13,13.5 L21,16 Z"/>
+                    </svg>
+                </div>
+            `;
+
+            return L.divIcon({
+                html: svgHtml, className: 'aircraft-marker-icon', iconSize: [28, 28], iconAnchor: [14, 14]
+            });
+        }
+
+        async function fetchFlightData() {
+            try {
+                const url = `/api/flights?home_lat=${homeState.lat}&home_lon=${homeState.lon}&radius=${homeState.radius}`;
+                const response = await fetch(url);
+                const data = await response.json();
+                
+                if (data.status === 'success' || data.status === 'rate_limited') {
+                    rawFlightsData = data.flights || [];
+                    updateDashboard(rawFlightsData);
+                    document.getElementById('statusText').innerText = data.cached ? "CACHED ADS-B FEED" : "LIVE OPENSKY FEED";
+                }
+            } catch (err) {
+                console.error("Failed to fetch flights:", err);
+                document.getElementById('statusText').innerText = "DISCONNECTED";
+            }
+        }
+
+        function updateDashboard(flights) {
+            updateTelemetryStats(flights);
+            updateMapMarkers(flights);
+            sortAndRenderTable();
+            
+            if (selectedIcao) {
+                const current = flights.find(f => f.icao24 === selectedIcao);
+                if (current) openInspector(current);
+            }
+
+            if (isRetroMode) {
+                renderRetroSlide();
+            }
+        }
+
+        function updateTelemetryStats(flights) {
+            document.getElementById('statCount').innerText = flights.length;
+
+            if (flights.length > 0) {
+                const nearest = flights[0];
+                document.getElementById('statNearest').innerHTML = `${nearest.callsign} <span style="font-size:11px; font-weight: normal; color:#d8b4fe;">(${nearest.dist_miles} MI)</span>`;
+            } else {
+                document.getElementById('statNearest').innerText = `- MI`;
+            }
+
+            let maxSpeed = 0;
+            flights.forEach(f => {
+                if (f.velocity_mph > maxSpeed) maxSpeed = f.velocity_mph;
+            });
+            document.getElementById('statMaxSpeed').innerHTML = `${maxSpeed} <span style="font-size:11px; font-weight: normal; color:var(--text-muted);">MPH</span>`;
+        }
+
+        function updateMapMarkers(flights) {
+            const currentIcaos = new Set(flights.map(f => f.icao24));
+
+            Object.keys(flightMarkers).forEach(icao => {
+                if (!currentIcaos.has(icao)) {
+                    map.removeLayer(flightMarkers[icao]);
+                    delete flightMarkers[icao];
+                }
+            });
+
+            flights.forEach(f => {
+                const icon = createAircraftIcon(f.heading, f.on_ground);
+                const popupContent = `
+                    <div class="popup-title">${f.callsign}</div>
+                    <div style="font-size:11px; color:var(--cyan-accent); font-weight:bold; margin-bottom:4px;">${f.origin} ➔ ${f.destination}</div>
+                    <div style="font-size:10px; color:var(--text-muted);">${f.airline} • ${f.aircraft_type}</div>
+                    <div class="popup-grid">
+                        <div class="popup-item"><span>DISTANCE</span><b style="color:#d8b4fe;">${f.dist_miles} MI</b></div>
+                        <div class="popup-item"><span>ALTITUDE</span><b>${f.altitude_ft.toLocaleString()} ft</b></div>
+                        <div class="popup-item"><span>SPEED</span><b>${f.velocity_mph} mph</b></div>
+                        <div class="popup-item"><span>TAIL #</span><b>${f.registration}</b></div>
+                    </div>
+                `;
+
+                if (flightMarkers[f.icao24]) {
+                    flightMarkers[f.icao24].setLatLng([f.lat, f.lon]);
+                    flightMarkers[f.icao24].setIcon(icon);
+                    flightMarkers[f.icao24].getPopup().setContent(popupContent);
+                } else {
+                    const marker = L.marker([f.lat, f.lon], { icon: icon }).addTo(map);
+                    marker.bindPopup(popupContent);
+                    marker.on('click', () => selectFlightRow(f.icao24));
+                    flightMarkers[f.icao24] = marker;
+                }
+            });
+        }
+
+        function sortAndRenderTable() {
+            const sortBy = document.getElementById('sortSelect').value;
+            let sorted = [...rawFlightsData];
+
+            if (sortBy === 'dist_asc') {
+                sorted.sort((a, b) => a.dist_miles - b.dist_miles);
+            } else if (sortBy === 'alt_desc') {
+                sorted.sort((a, b) => b.altitude_ft - a.altitude_ft);
+            } else if (sortBy === 'speed_desc') {
+                sorted.sort((a, b) => b.velocity_mph - a.velocity_mph);
+            } else if (sortBy === 'callsign') {
+                sorted.sort((a, b) => a.callsign.localeCompare(b.callsign));
+            }
+
+            renderTable(sorted);
+        }
+
+        function renderTable(flights) {
+            const tbody = document.getElementById('flightTableBody');
+            const search = document.getElementById('searchInput').value.toLowerCase();
+
+            let filtered = flights.filter(f => {
+                const matchesSearch = f.callsign.toLowerCase().includes(search) || 
+                                      f.airline.toLowerCase().includes(search) ||
+                                      f.origin.toLowerCase().includes(search) ||
+                                      f.destination.toLowerCase().includes(search) ||
+                                      f.aircraft_type.toLowerCase().includes(search) ||
+                                      f.registration.toLowerCase().includes(search);
+                
+                if (!matchesSearch) return false;
+
+                if (currentFilter === 'airborne') return !f.on_ground;
+                if (currentFilter === 'ground') return f.on_ground;
+                return true;
+            });
+
+            if (filtered.length === 0) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="5" class="empty-state">
+                            <i class="fa-solid fa-plane-slash"></i>
+                            <div>No matching flights within current radar view.</div>
+                        </td>
+                    </tr>
+                `;
+                return;
+            }
+
+            tbody.innerHTML = filtered.map(f => {
+                const isSelected = f.icao24 === selectedIcao ? 'selected' : '';
+                const altDisplay = f.on_ground 
+                    ? `<span style="font-size:10px; color:var(--text-muted); font-weight:bold;">GROUND</span>` 
+                    : `<span class="alt-badge">${f.altitude_ft.toLocaleString()} <span style="font-size:9px; color:var(--text-muted);">FT</span></span>`;
+
+                return `
+                    <tr class="flight-row ${isSelected}" onclick="selectFlightRow('${f.icao24}')">
+                        <td>
+                            <div>
+                                <div class="callsign-title">${f.callsign}</div>
+                                <div class="airline-sub">${f.airline}</div>
+                            </div>
+                        </td>
+                        <td>
+                            <div class="route-badge">
+                                <span>${f.route_str}</span>
+                            </div>
+                        </td>
+                        <td>
+                            <div>
+                                <div class="aircraft-badge">${f.aircraft_type}</div>
+                                <div class="reg-sub">${f.registration}</div>
+                            </div>
+                        </td>
+                        <td><span class="dist-badge">${f.dist_miles} MI</span></td>
+                        <td>
+                            <div>
+                                ${altDisplay}
+                                <div class="speed-badge">${f.velocity_mph} <span style="font-size:9px; color:var(--text-muted);">MPH</span></div>
+                            </div>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        function selectFlightRow(icao) {
+            selectedIcao = icao;
+            const flight = rawFlightsData.find(f => f.icao24 === icao);
+            if (flight) {
+                openInspector(flight);
+                focusFlight(flight.icao24, flight.lat, flight.lon);
+                sortAndRenderTable();
+            }
+        }
+
+        function openInspector(f) {
+            document.getElementById('inspRoute').innerHTML = `
+                <span>${f.origin}</span>
+                <i class="fa-solid fa-plane" style="color: var(--cyan-accent); font-size: 13px;"></i>
+                <span>${f.destination}</span>
+            `;
+            document.getElementById('inspAirline').innerText = `${f.airline} • Callsign: ${f.callsign}`;
+            document.getElementById('inspDist').innerText = `${f.dist_miles} MI`;
+            document.getElementById('inspAlt').innerText = `${f.altitude_ft.toLocaleString()} FT`;
+            document.getElementById('inspSpeed').innerText = `${f.velocity_mph} MPH (${f.velocity_kts} kts)`;
+            document.getElementById('inspHeading').innerText = `${f.heading}° (${f.cardinal})`;
+            document.getElementById('inspAircraft').innerText = f.aircraft_type;
+            document.getElementById('inspTail').innerText = f.registration;
+            
+            let vRateStr = f.vertical_rate_fpm > 100 ? `+${f.vertical_rate_fpm} FPM` : `${f.vertical_rate_fpm} FPM`;
+            document.getElementById('inspVRate').innerText = vRateStr;
+            document.getElementById('inspSquawk').innerText = f.squawk;
+
+            document.getElementById('inspectorDrawer').classList.add('active');
+        }
+
+        function closeInspector() {
+            selectedIcao = null;
+            document.getElementById('inspectorDrawer').classList.remove('active');
+            sortAndRenderTable();
+        }
+
+        function focusFlight(icao, lat, lon) {
+            map.flyTo([lat, lon], 12, { duration: 1.2 });
+            if (flightMarkers[icao]) {
+                flightMarkers[icao].openPopup();
+            }
+        }
+
+        /* ---------------------------------------------------- */
+        /* 90S RETRO TERMINAL LOGIC (10s ROTATION CYCLE)       */
+        /* ---------------------------------------------------- */
+        function openRetroTerminal() {
+            isRetroMode = true;
+            retroSlideIndex = 0;
+            retroCountdown = 10;
+            document.getElementById('retroTerminalView').classList.add('active');
+
+            initRetroMaps();
+            renderRetroSlide();
+            startRetroTimer();
+        }
+
+        function closeRetroTerminal() {
+            isRetroMode = false;
+            document.getElementById('retroTerminalView').classList.remove('active');
+            if (retroTimer) clearInterval(retroTimer);
+        }
+
+        function initRetroMaps() {
+            if (!retroMiniMap) {
+                retroMiniMap = L.map('retroMiniMap', { center: [homeState.lat, homeState.lon], zoom: 10, zoomControl: false });
+                L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { maxZoom: 18 }).addTo(retroMiniMap);
+            }
+            if (!retroSummaryMap) {
+                retroSummaryMap = L.map('retroSummaryMap', { center: [homeState.lat, homeState.lon], zoom: 9, zoomControl: false });
+                L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { maxZoom: 18 }).addTo(retroSummaryMap);
+            }
+        }
+
+        function startRetroTimer() {
+            if (retroTimer) clearInterval(retroTimer);
+            retroCountdown = 10; // 10-second cycle as requested
+            document.getElementById('retroSlideTimer').innerText = retroCountdown;
+
+            retroTimer = setInterval(() => {
+                retroCountdown--;
+                document.getElementById('retroSlideTimer').innerText = retroCountdown;
+
+                if (retroCountdown <= 0) {
+                    retroCountdown = 10;
+                    retroSlideIndex = (retroSlideIndex + 1) % 6; // 6 screens total (0-4 spotlight, 5 summary)
+                    renderRetroSlide();
+                }
+            }, 1000);
+        }
+
+        function renderRetroSlide() {
+            const top5 = [...rawFlightsData].sort((a,b) => a.dist_miles - b.dist_miles).slice(0, 5);
+
+            for (let i = 0; i < 6; i++) {
+                const dot = document.getElementById(`dot${i}`);
+                if (dot) dot.classList.toggle('active', i === retroSlideIndex);
+            }
+
+            if (retroSlideIndex < 5) {
+                // Screens 1 to 5: Spotlight on Aircraft Rank #1 through #5
+                document.getElementById('retroSpotlightSlide').style.display = 'grid';
+                document.getElementById('retroSummarySlide').style.display = 'none';
+
+                const flight = top5[retroSlideIndex];
+                const rankNum = retroSlideIndex + 1;
+
+                document.getElementById('retroSlideLabel').innerText = `SCREEN ${rankNum}/6: CLOSEST AIRCRAFT #${rankNum}`;
+                document.getElementById('retroRankLabel').innerText = `PROXIMITY RANK: #${rankNum} CLOSEST AIRCRAFT TO YOUR HOUSE`;
+                document.getElementById('retroTimestamp').innerText = new Date().toLocaleTimeString();
+
+                if (!flight) {
+                    document.getElementById('retroAirlineText').innerText = "SEARCHING AIRSPACE...";
+                    document.getElementById('retroRouteBanner').innerText = "NO AIRCRAFT DETECTED";
+                    document.getElementById('retroDist').innerText = "SCANNING...";
+                    return;
+                }
+
+                document.getElementById('retroAirlineText').innerText = `${flight.airline.toUpperCase()} [${flight.callsign}]`;
+                document.getElementById('retroOrigin').innerText = flight.origin.toUpperCase();
+                document.getElementById('retroDest').innerText = flight.destination.toUpperCase();
+                document.getElementById('retroDist').innerText = `PROXIMITY: ${flight.dist_miles} STATUTE MILES FROM YOUR HOUSE`;
+
+                document.getElementById('retroAlt').innerText = `${flight.altitude_ft.toLocaleString()} FT`;
+                document.getElementById('retroSpeed').innerText = `${flight.velocity_mph} MPH (${flight.velocity_kts} KTS)`;
+                document.getElementById('retroHeading').innerText = `${flight.heading}° (${flight.cardinal})`;
+                document.getElementById('retroVRate').innerText = flight.vertical_rate_fpm > 100 ? `+${flight.vertical_rate_fpm} FPM` : `${flight.vertical_rate_fpm} FPM`;
+                document.getElementById('retroAircraft').innerText = flight.aircraft_type.toUpperCase();
+                document.getElementById('retroTail').innerText = flight.registration.toUpperCase();
+
+                // Render Mini Map with House Beacon & 90s Amber Popup
+                setTimeout(() => {
+                    retroMiniMap.invalidateSize();
+                    retroMiniMap.setView([flight.lat, flight.lon], 11);
+
+                    // Add House Beacon to mini map
+                    if (!retroMiniHomeMarker) {
+                        retroMiniHomeMarker = L.marker([homeState.lat, homeState.lon], { icon: createRetroHomeIcon() }).addTo(retroMiniMap);
+                    } else {
+                        retroMiniHomeMarker.setLatLng([homeState.lat, homeState.lon]);
+                    }
+
+                    if (retroMiniMapMarker) retroMiniMap.removeLayer(retroMiniMapMarker);
+                    const icon = createAircraftIcon(flight.heading, flight.on_ground, true);
+                    
+                    const retroPopupContent = `
+                        <div style="font-weight:bold; color:#ffb000; font-size:20px;">${flight.callsign}</div>
+                        <div style="color:#ffffff;">${flight.route_str}</div>
+                        <div style="color:#33ff00; font-size:18px; margin-top:2px;">${flight.dist_miles} MI FROM HOUSE</div>
+                        <div style="font-size:16px;">ALT: ${flight.altitude_ft.toLocaleString()} FT | SPD: ${flight.velocity_mph} MPH</div>
+                    `;
+
+                    retroMiniMapMarker = L.marker([flight.lat, flight.lon], { icon: icon }).addTo(retroMiniMap);
+                    retroMiniMapMarker.bindPopup(retroPopupContent, { className: 'retro-popup' }).openPopup();
+                }, 100);
+
+            } else {
+                // Screen 6: Side-by-side Summary Table & Radar View
+                document.getElementById('retroSpotlightSlide').style.display = 'none';
+                document.getElementById('retroSummarySlide').style.display = 'grid';
+
+                document.getElementById('retroSlideLabel').innerText = `SCREEN 6/6: TOP 5 PROXIMITY RADAR & SUMMARY TABLE`;
+
+                const tbody = document.getElementById('retroSummaryTableBody');
+                tbody.innerHTML = top5.map((f, idx) => `
+                    <tr class="${idx === 0 ? 'active-row' : ''}">
+                        <td>#${idx + 1}</td>
+                        <td><b>${f.callsign}</b><br><small style="font-size:16px;">${f.airline}</small></td>
+                        <td style="color:#33ff00;">${f.dist_miles} MI</td>
+                        <td>${f.route_str}</td>
+                        <td>${f.altitude_ft.toLocaleString()} FT</td>
+                        <td>${f.velocity_mph} MPH</td>
+                    </tr>
+                `).join('');
+
+                // Render Summary Radar Map with House Beacon & all 5 planes
+                setTimeout(() => {
+                    retroSummaryMap.invalidateSize();
+                    retroSummaryMap.setView([homeState.lat, homeState.lon], 9);
+
+                    retroSummaryMarkers.forEach(m => retroSummaryMap.removeLayer(m));
+                    retroSummaryMarkers = [];
+
+                    // House Beacon
+                    const homeM = L.marker([homeState.lat, homeState.lon], { icon: createRetroHomeIcon() }).addTo(retroSummaryMap);
+                    retroSummaryMarkers.push(homeM);
+
+                    top5.forEach(f => {
+                        const icon = createAircraftIcon(f.heading, f.on_ground, true);
+                        const m = L.marker([f.lat, f.lon], { icon: icon }).addTo(retroSummaryMap);
+                        const retroPopupContent = `
+                            <div style="font-weight:bold; color:#ffb000; font-size:18px;">${f.callsign} (#${f.dist_miles} MI)</div>
+                            <div style="color:#ffffff;">${f.route_str}</div>
+                            <div style="color:#33ff00;">ALT: ${f.altitude_ft.toLocaleString()} FT</div>
+                        `;
+                        m.bindPopup(retroPopupContent, { className: 'retro-popup' });
+                        retroSummaryMarkers.push(m);
+                    });
+                }, 100);
+            }
+        }
+
+        // Keyboard Shortcut: Press ESC to exit retro mode
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && isRetroMode) {
+                closeRetroTerminal();
+            } else if ((e.key === 'f' || e.key === 'F') && !isRetroMode && document.activeElement.tagName !== 'INPUT') {
+                openRetroTerminal();
+            }
+        });
+
+        function setFilter(filter, btn) {
+            currentFilter = filter;
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            sortAndRenderTable();
+        }
+
+        function filterTable() {
+            sortAndRenderTable();
+        }
+
+        function openHomeModal() {
+            document.getElementById('addressInput').value = homeState.address;
+            document.getElementById('radiusSlider').value = homeState.radius;
+            updateRadiusLabel(homeState.radius);
+            document.getElementById('homeModal').classList.add('active');
+        }
+
+        function closeHomeModal() {
+            document.getElementById('homeModal').classList.remove('active');
+        }
+
+        function updateRadiusLabel(val) {
+            document.getElementById('radiusValue').innerText = val;
+        }
+
+        async function locateAddress() {
+            const addr = document.getElementById('addressInput').value.trim();
+            if (!addr) return;
+
+            try {
+                const resp = await fetch(`/api/geocode?address=${encodeURIComponent(addr)}`);
+                const data = await resp.json();
+                if (data.status === 'success') {
+                    homeState.lat = data.lat;
+                    homeState.lon = data.lon;
+                    homeState.address = data.display_name.split(',')[0] + ', ' + (data.display_name.split(',')[1] || '');
+                    alert(`Located: ${homeState.address} (${homeState.lat.toFixed(4)}, ${homeState.lon.toFixed(4)})`);
+                } else {
+                    alert(`Address Error: ${data.message}`);
+                }
+            } catch (err) {
+                alert("Geocoding service unavailable.");
+            }
+        }
+
+        function saveHomeConfig() {
+            homeState.radius = parseInt(document.getElementById('radiusSlider').value);
+            homeState.address = document.getElementById('addressInput').value.trim() || homeState.address;
+
+            localStorage.setItem('home_address', homeState.address);
+            localStorage.setItem('home_lat', homeState.lat);
+            localStorage.setItem('home_lon', homeState.lon);
+            localStorage.setItem('home_radius', homeState.radius);
+
+            document.getElementById('homeLocationLabel').innerText = `Home: ${homeState.address} (${homeState.radius} mi radius)`;
+
+            drawRadarRings();
+            map.flyTo([homeState.lat, homeState.lon], 9, { duration: 1.2 });
+
+            closeHomeModal();
+            fetchFlightData();
+        }
+
+        function startTimer() {
+            countdownSec = 15;
+            if (timerInterval) clearInterval(timerInterval);
+
+            timerInterval = setInterval(() => {
+                countdownSec--;
+                document.getElementById('timerText').innerText = `${countdownSec}s`;
+                
+                if (countdownSec <= 0) {
+                    countdownSec = 15;
+                    fetchFlightData();
+                }
+            }, 1000);
+        }
+
+        function manualRefresh() {
+            fetchFlightData();
+            startTimer();
+        }
+
+        // Initial Load
+        document.getElementById('homeLocationLabel').innerText = `Home: ${homeState.address} (${homeState.radius} mi radius)`;
+        drawRadarRings();
+        fetchFlightData();
+        startTimer();
+    </script>
+</body>
+</html>
