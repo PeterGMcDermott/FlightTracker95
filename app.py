@@ -238,6 +238,7 @@ def flights():
     try:
         headers = {'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)'}
         response = requests.get(opensky_url, headers=headers, timeout=8)
+        print(f"DEBUG: OpenSky HTTP Status: {response.status_code}, Body: {response.text[:200]}")
         
         if response.status_code == 200:
             data = response.json()
